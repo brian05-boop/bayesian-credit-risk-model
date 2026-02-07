@@ -1,0 +1,118 @@
+---
+title: "Bayesian-Logistic-Modeling-of-Credit-Risk-and-Loan-Approval"
+author: "BABUSI BRIAN RASENYAI"
+date: "2026-01-13"
+output: html_document
+---
+
+```{r, include=FALSE}
+library(readxl)
+```
+
+```{r, include=FALSE}
+library(readr)
+Loan_data=read_csv("C:/Users/Brian/Documents/DATA FOR PROJECT/loan_prediction_dataset.csv")
+head(Loan_data)
+```
+
+
+```{r}
+library(dplyr)
+```
+
+```{r, include=FALSE}
+str(Loan_data)
+summary(Loan_data)
+head(Loan_data)
+loan_data <- Loan_data %>%rename(age= Age,
+    income = Income,
+    Credit_score =Credit_Score,
+    Loan_Amount = Loan_Amount,
+    Loan_Term = Loan_Term,
+    Employment_Status = Employment_Status,
+    Loan_Approved =Loan_Approved
+  )
+
+
+
+```
+
+```{r, echo=FALSE}
+table(loan_data$Loan_Approved)
+mean(loan_data$Loan_Approved)
+#the data shows that the average approval rate is 17%. 
+loan_data%>% group_by(Loan_Approved)%>% summarise(mean_income=mean(income), mean_credit_score=mean(Credit_score),mean_loan_amount= mean(Loan_Amount),mean_age=mean(age))
+
+```
+
+```{r, echo=FALSE}
+library(ggplot2)
+ggplot(loan_data, aes(x=factor(Loan_Approved),y=Credit_score))+geom_boxplot()+labs(x="Loan Approved (0=No,1=Yes)",y="Credit Score", title = "Credit score by loan approval status")
+```
+#The stark vertical displacement between the "approved" and "Denied" groups indicates that credit score is not merely a contributing factor, but likely the primary thresholdvariable in the lending decision process. the boxplot reveals a significant correlation between credit scores and loan approval outcomes. the boxplot suggests that a higher credit score drastically increases the likelihood of loan approval. 
+
+```{r, include=FALSE}
+str(loan_data)
+loan_data$Employment_Status <- as.factor(loan_data$Employment_Status)
+```
+
+```{r, echo=FALSE}
+#logit model
+logit_model= glm(Loan_Approved~age+income+Credit_score+Loan_Amount+Loan_Term+Employment_Status,data=loan_data,family = binomial(link="logit"))
+summary(logit_model)
+loan_data$predicted_probability=predict(logit_model,type="response")
+loan_data$predicted_class= ifelse(loan_data$predicted_probability>0.5,1,0)
+table(Actual=loan_data$Loan_Approved,Predicted=loan_data$predicted_class)
+
+```
+#From the results above it shows that higher credit scores substantially increase the probability of loan approval. The positive and extremely significant p value supports this claim. 
+#in regards to age , older applicants have a slightly higher approval probability, holding other factors constant. the statistically significant p value proves this. 
+#the loan amount results shows a strong negative estimate and statistically significant p vale , this suggest that a larger requested loan amount reduces the likelihood of approval.
+#A higher income is associated with higher approval probability. 
+# other variables like the employment status and loan term are statistically significant. we can conclude that they do not independently explain the approval outcomes in regards to the loans. 
+
+#ODDS RATIO
+```{r, echo=FALSE}
+exp(coef(logit_model))
+
+```
+#Odds ratio estimates indicate that credit score and income substantially increase the likelihood of loan approval, while higher loan amounts reduce approval odds. Employment status exhibits limited independent explanatory power after controlling for financial variables.
+
+#BAYESIAN LOGISTIC REGRESSION 
+
+
+
+```{r, include=FALSE}
+library(rstanarm)
+bayes_logit <- stan_glm(
+  Loan_Approved ~ scale(age) + scale(income) + scale(Credit_score) +
+  scale(Loan_Amount) + scale(Loan_Term) + Employment_Status,
+  data = loan_data,
+  family = binomial(link = "logit"),
+
+  prior = normal(0, 2.5),
+  prior_intercept = normal(0, 5),
+
+  chains = 2,
+  iter = 1000,
+  seed = 123
+)
+
+
+
+```
+
+```{r, echo=FALSE}
+summary(bayes_logit)
+exp(coef(bayes_logit))
+exp(posterior_interval(bayes_logit,prob=0.95))
+
+```
+#Bayesian logistic regression results indicate that credit score is the dominant determinant of loan approval, with a one standard deviation increase multiplying approval odds by over 40. Income exhibits a strong positive effect, while loan amount significantly reduces approval probability. Age has a modest positive association, and loan term and employment status provide limited additional explanatory power once financial variables are controlled for. Posterior credible intervals and convergence diagnostics indicate stable and reliable inference.
+
+```{r}
+pp_check(bayes_logit)
+
+```
+
+#the ppc confirms that the model is not surprised by the data it was trained on. this, combined with stable convergence diagnostics , ensures that the posterior estimates for the variables are reliable for hypothesis testing.
